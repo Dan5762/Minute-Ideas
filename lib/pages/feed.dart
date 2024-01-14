@@ -1,4 +1,7 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:provider/provider.dart';
 
 import 'package:url_launcher/url_launcher.dart';
@@ -7,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:MinuteIdeas/models/feed.dart';
 import 'package:MinuteIdeas/models/idea.dart';
+import 'package:MinuteIdeas/widgets/paging_scroll_physics.dart';
 
 int countWords(String str) {
   var words = str.split(RegExp(r'\s+'));
@@ -24,27 +28,27 @@ class Feed extends StatefulWidget {
 
 class _FeedState extends State<Feed> {
   int currentIndex = 0;
-  static const _pageSize = 5;
+  static const nNewIdeas = 2;
+  static const nQuestions = 2;
 
   final PagingController<int, Idea> _pagingController =
-      PagingController(firstPageKey: 0, invisibleItemsThreshold: 3);
+      PagingController(firstPageKey: 0, invisibleItemsThreshold: 1);
 
   Future<void> _fetchPage(int pageKey, FeedModel feedModel) async {
-    List<Idea> recomendedIdeas = await feedModel.getRecomendedIdeas(_pageSize);
+    List<Idea> feedItems = await feedModel.getFeedIdeas(nNewIdeas, nQuestions);
 
-    while (recomendedIdeas.isEmpty) {
+    while (feedItems.isEmpty) {
       await Future.delayed(const Duration(milliseconds: 50));
-      recomendedIdeas = await feedModel.getRecomendedIdeas(_pageSize);
+      feedItems = await feedModel.getFeedIdeas(nNewIdeas, nQuestions);
     }
 
     try {
-      final newItems = recomendedIdeas;
-      final isLastPage = newItems.length < _pageSize;
+      final isLastPage = feedItems.length < nQuestions;
       if (isLastPage) {
-        _pagingController.appendLastPage(newItems);
+        _pagingController.appendLastPage(feedItems);
       } else {
-        final nextPageKey = pageKey + newItems.length;
-        _pagingController.appendPage(newItems, nextPageKey);
+        final nextPageKey = pageKey + feedItems.length;
+        _pagingController.appendPage(feedItems, nextPageKey);
       }
     } catch (error) {
       _pagingController.error = error;
@@ -59,6 +63,11 @@ class _FeedState extends State<Feed> {
 
   @override
   Widget build(BuildContext context) {
+    double cardHeight = (MediaQuery.of(context).size.height -
+            MediaQuery.paddingOf(context).top -
+            MediaQuery.paddingOf(context).bottom) -
+        66 -
+        48;
     return Consumer<FeedModel>(builder: (context, feedModel, child) {
       if (!feedModel.isInitialized) {
         return const Scaffold(
@@ -76,8 +85,11 @@ class _FeedState extends State<Feed> {
               child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: PagedListView<int, Idea>(
+                      itemExtent: cardHeight,
+                      physics: PagingScrollPhysics(itemHeight: cardHeight),
                       pagingController: _pagingController,
                       builderDelegate: PagedChildBuilderDelegate<Idea>(
+                          animateTransitions: true,
                           noItemsFoundIndicatorBuilder: (context) =>
                               const Center(
                                   child: Text('No ideas found :(',
@@ -99,7 +111,7 @@ class _FeedState extends State<Feed> {
                                     stopwatch.stop();
 
                                     if (stopwatch.elapsed.inSeconds > 2) {
-                                      int nWords = countWords(idea.description);
+                                      int nWords = countWords(idea.content);
 
                                       double weight =
                                           stopwatch.elapsed.inSeconds / nWords;
@@ -108,7 +120,7 @@ class _FeedState extends State<Feed> {
                                               (weight + 1)); // limit to below 1
 
                                       feedModel.weightedUpdateUserVector(
-                                          idea.embedding, 0.2);
+                                          idea.embedding, 0.1);
                                       stopwatch.reset();
                                     }
                                   }
@@ -126,34 +138,126 @@ class IdeaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 16),
-        child: Card(
-            child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                    mainAxisSize: MainAxisSize.max,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(idea.title,
-                          style: const TextStyle(
-                              fontSize: 20, fontWeight: FontWeight.w500)),
-                      const Divider(height: 16),
-                      Text(idea.description,
-                          style: const TextStyle(fontSize: 16)),
-                      const Divider(height: 16),
-                      Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            GestureDetector(
-                                onTap: () => launchUrl(Uri.parse(idea.source)),
-                                child: const Text('Source',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w500)))
-                          ])
-                    ]))));
+    return Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+            color: Colors.white, borderRadius: BorderRadius.circular(8)),
+        height: MediaQuery.of(context).size.height,
+        child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+                mainAxisSize: MainAxisSize.max,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (idea.read == null) IdeaRegion(idea: idea),
+                  if (idea.read != null) QuestionRegion(idea: idea),
+                  const Divider(height: 16),
+                  Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        GestureDetector(
+                            onTap: () => launchUrl(Uri.parse(idea.source)),
+                            child: const Text('Source',
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 16, fontWeight: FontWeight.w500)))
+                      ])
+                ])));
+  }
+}
+
+class IdeaRegion extends StatelessWidget {
+  final Idea idea;
+
+  const IdeaRegion({Key? key, required this.idea}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+        child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(idea.title,
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
+          const Divider(height: 16),
+          Expanded(
+              child: Text(idea.content, style: const TextStyle(fontSize: 16))),
+        ]));
+  }
+}
+
+class QuestionRegion extends StatelessWidget {
+  final Idea idea;
+  final ValueNotifier<int?> selectedAnswer = ValueNotifier<int?>(null);
+
+  QuestionRegion({Key? key, required this.idea}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    final random = Random();
+    int questionIndex = random.nextInt(idea.questions.length);
+    return Expanded(
+        child: Column(
+            mainAxisSize: MainAxisSize.max,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          Text(idea.title,
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w500)),
+          const Divider(height: 16),
+          Text(
+              idea.questions[questionIndex].question ??
+                  "Oops no question found, that's odd",
+              style: const TextStyle(fontSize: 16)),
+          const Spacer(),
+          const Text("Which is correct?",
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 16)),
+          for (final (int choiceIndex, String choice)
+              in idea.questions[questionIndex].choices!.indexed)
+            ValueListenableBuilder<int?>(
+                valueListenable: selectedAnswer,
+                builder: (context, value, child) {
+                  return Selector<FeedModel, Function>(
+                      selector: (_, feedModel) => feedModel.markIdeaAsUnread,
+                      builder: (_, markIdeaAsUnread, __) => GestureDetector(
+                          onTap: () {
+                            selectedAnswer.value = idea
+                                .questions[questionIndex].choices
+                                ?.indexOf(choice);
+
+                            if (choiceIndex !=
+                                idea.questions[questionIndex].answer) {
+                              markIdeaAsUnread(idea);
+                            }
+                          },
+                          child: Container(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              decoration: BoxDecoration(
+                                  color: choiceIndex ==
+                                              idea.questions[questionIndex]
+                                                  .answer &&
+                                          value ==
+                                              idea.questions[questionIndex]
+                                                  .answer
+                                      ? Colors.green
+                                      : choiceIndex !=
+                                                  idea.questions[questionIndex]
+                                                      .answer &&
+                                              value == choiceIndex
+                                          ? CupertinoColors.destructiveRed
+                                          : const Color.fromARGB(
+                                              255, 59, 59, 59),
+                                  borderRadius: BorderRadius.circular(8)),
+                              alignment: Alignment.center,
+                              child: Text(choice,
+                                  textAlign: TextAlign.center,
+                                  style:
+                                      const TextStyle(color: Colors.white)))));
+                }),
+        ]));
   }
 }

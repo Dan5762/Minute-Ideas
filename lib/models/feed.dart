@@ -32,9 +32,11 @@ class FeedModel extends ChangeNotifier {
     final ideasJson =
         List<Map<String, dynamic>>.from(json.decode(ideasJsonRaw));
 
-    await isar.writeTxn(() async {
-      isar.ideas.importJson(ideasJson);
-    });
+    if (await isar.ideas.count() == 0) {
+      await isar.writeTxn(() async {
+        isar.ideas.importJson(ideasJson);
+      });
+    }
 
     isInitialized = true;
 
@@ -112,38 +114,42 @@ class FeedModel extends ChangeNotifier {
     return vector.map((e) => e + noise * random.nextDouble()).toList();
   }
 
-  Future<List<Idea>> getRecomendedIdeas(int nRecomendations) async {
+  Future<List<Idea>> getFeedIdeas(int nRecomendations, int nQuestions) async {
+    print("Getting feed ideas");
     if (isar.isOpen == false) {
       return [];
     }
-    final ideas = await isar.ideas.filter().readIsNull().findAll();
+    final readIdeas = await isar.ideas
+        .filter()
+        .readIsNotNull()
+        .sortByRead()
+        .findAll();
+
+    final unReadIdeas = await isar.ideas.filter().readIsNull().findAll();
 
     userVector = addNoiseToVector(userVector, 0.05);
 
-    ideas.sort((a, b) => cosineSimilarity(b.embedding, userVector)
+    unReadIdeas.sort((a, b) => cosineSimilarity(b.embedding, userVector)
         .compareTo(cosineSimilarity(a.embedding, userVector)));
 
-    List<Idea> recomendedIdeas = ideas.take(nRecomendations).toList();
+    List<Idea> feedIdeas = unReadIdeas.take(nRecomendations).toList() +
+        readIdeas.take(nQuestions).toList();
+
+    feedIdeas.shuffle();
+
+    List<Idea> updateReadFeedIdeas = feedIdeas
+        .map((feedIdea) => feedIdea.copyWith(read: DateTime.now()))
+        .toList();
 
     await isar.writeTxn(() async {
-      for (Idea recomendedIdea in recomendedIdeas) {
-        recomendedIdea.read = DateTime.now();
-        isar.ideas.put(recomendedIdea);
+      for (Idea idea in updateReadFeedIdeas) {
+        isar.ideas.put(idea);
       }
     });
 
-    return recomendedIdeas;
-  }
+    print(feedIdeas);
 
-  Future<List<Idea>> getKnowledgeIdeas(int nKnowledgeIdeas) async {
-    if (isar.isOpen == false) {
-      return [];
-    }
-    final ideas = await isar.ideas.filter().readIsNotNull().sortByRead().findAll();
-
-    List<Idea> knowledgeIdeas = ideas.take(nKnowledgeIdeas).toList();
-
-    return knowledgeIdeas;
+    return feedIdeas;
   }
 
   Map<String, double> getCategorySimilarities() {
@@ -152,5 +158,14 @@ class FeedModel extends ChangeNotifier {
       categorySimilarities[key] = cosineSimilarity(userVector, value);
     });
     return categorySimilarities;
+  }
+
+  void markIdeaAsUnread(Idea idea) async {
+    await isar.writeTxn(() async {
+      print(idea.title);
+      idea.read = null;
+      isar.ideas.put(idea);
+      print(idea.title);
+    });
   }
 }

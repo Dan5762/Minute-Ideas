@@ -5,12 +5,13 @@ import 'package:flutter/cupertino.dart';
 import 'package:MinuteIdeas/pages/feed.dart';
 import 'package:MinuteIdeas/models/feed.dart';
 import 'package:MinuteIdeas/pages/profile.dart';
-import 'package:MinuteIdeas/pages/knowledge.dart';
 
 void main() {
   runApp(ChangeNotifierProvider(
       create: (context) => FeedModel(), child: const MyApp()));
 }
+
+final ValueNotifier<bool> showProfile = ValueNotifier<bool>(false);
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -22,13 +23,11 @@ class MyApp extends StatelessWidget {
         home: CupertinoTabScaffold(
             tabBar: CupertinoTabBar(
                 currentIndex: 0,
-                backgroundColor: Colors.black,
+                backgroundColor: const Color.fromARGB(255, 36, 36, 36),
                 activeColor: Colors.white,
                 items: const <BottomNavigationBarItem>[
                   BottomNavigationBarItem(
                       icon: Icon(CupertinoIcons.lightbulb), label: 'Facts'),
-                  BottomNavigationBarItem(
-                      icon: Icon(CupertinoIcons.book), label: 'Knowledge'),
                   BottomNavigationBarItem(
                       icon: Icon(CupertinoIcons.profile_circled),
                       label: 'Profile')
@@ -37,8 +36,6 @@ class MyApp extends StatelessWidget {
               return CupertinoTabView(builder: (BuildContext context) {
                 switch (index) {
                   case 1:
-                    return const Knowledge();
-                  case 2:
                     return const Profile();
                   default:
                     return const Feed();

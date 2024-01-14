@@ -13,10 +13,9 @@ class Profile extends StatelessWidget {
     return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          CategoriesRadarChart()
-        ])));
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [CategoriesRadarChart()])));
   }
 }
 

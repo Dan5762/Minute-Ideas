@@ -1,4 +1,4 @@
-# MinuteIdeas
+# Minute Ideas
 
 A new Flutter project.
 
