@@ -1,20 +1,52 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter/cupertino.dart';
 
-import 'package:MinuteIdeas/pages/home.dart';
+import 'package:MinuteIdeas/pages/feed.dart';
+import 'package:MinuteIdeas/models/feed.dart';
+import 'package:MinuteIdeas/pages/profile.dart';
+import 'package:MinuteIdeas/pages/knowledge.dart';
 
-void main() => runApp(const MyApp());
+void main() {
+  runApp(ChangeNotifierProvider(
+      create: (context) => FeedModel(), child: const MyApp()));
+}
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return CupertinoApp(
         title: 'Minute Ideas',
-        initialRoute: '/',
-        routes: {'/': (context) => const LandingPage()},
+        home: CupertinoTabScaffold(
+            tabBar: CupertinoTabBar(
+                currentIndex: 0,
+                backgroundColor: Colors.black,
+                activeColor: Colors.white,
+                items: const <BottomNavigationBarItem>[
+                  BottomNavigationBarItem(
+                      icon: Icon(CupertinoIcons.lightbulb), label: 'Facts'),
+                  BottomNavigationBarItem(
+                      icon: Icon(CupertinoIcons.book), label: 'Knowledge'),
+                  BottomNavigationBarItem(
+                      icon: Icon(CupertinoIcons.profile_circled),
+                      label: 'Profile')
+                ]),
+            tabBuilder: (BuildContext context, int index) {
+              return CupertinoTabView(builder: (BuildContext context) {
+                switch (index) {
+                  case 1:
+                    return const Knowledge();
+                  case 2:
+                    return const Profile();
+                  default:
+                    return const Feed();
+                }
+              });
+            }),
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(primarySwatch: primaryBlack));
+        theme: const CupertinoThemeData(brightness: Brightness.light));
   }
 }
 
